@@ -39,6 +39,7 @@ runs:
         #==========================================
         #Get workflow definitions from github
         $uri = "https://api.github.com/repos/$owner/$repo/actions/workflows"
+        Write-Output "uri: $uri"
         $workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -ErrorAction Stop
 
         #==========================================
