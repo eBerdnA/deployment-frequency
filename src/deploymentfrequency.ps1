@@ -26,8 +26,11 @@ Write-Output "Number of days: $numberOfDays"
 
 #==========================================
 #Get workflow definitions from github
+$headers = @{
+    'authorization' = 'Bearer ${{ secrets.GITHUB_TOKEN }}'
+}
 $uri = "https://api.github.com/repos/$owner/$repo/actions/workflows"
-$workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -ErrorAction Stop
+$workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Headers $headers -Method Get -ErrorAction Stop
 
 #==========================================
 #Extract workflow ids from the definitions, using the array of names. Number of Ids should == number of workflow names
