@@ -9,8 +9,13 @@ Param(
     [string] $ownerRepo,
     [string] $workflows,
     [string] $branch,
-    [Int32] $numberOfDays
+    [Int32] $numberOfDays,
+    [string] $appId,
+    [string] $appInstallationId,
+    [string] $privateKey
 )
+
+. "./app-auth.ps1"
 
 #==========================================
 #Input processing
@@ -27,8 +32,12 @@ Write-Output "Number of days: $numberOfDays"
 #==========================================
 #Get workflow definitions from github
 $uri = "https://api.github.com/repos/$owner/$repo/actions/workflows"
-$workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -ErrorAction Stop
-
+$token = Get-JwtToken -appId $appId -appInstallationId $appInstallationId -privateKey $privateKey
+$jwtHeader = @{
+    Accept = "application/vnd.github+json"
+    Authorization = "token $token"
+}
+$workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -Headers $jwtHeader -ErrorAction Stop
 #==========================================
 #Extract workflow ids from the definitions, using the array of names. Number of Ids should == number of workflow names
 $workflowIds = [System.Collections.ArrayList]@()
