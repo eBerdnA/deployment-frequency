@@ -16,11 +16,20 @@ inputs:
     description: number of days to scan
     required: true
     default: 30
+  app-id: # required
+    description: 'application of the registered GitHub app'
+    required: true
+  app-install-id: # required
+    description: 'id of the installed instance of the GitHub app'
+    required: true
+  app-private-key:
+    description: 'private key which has been generated for the installed instance of the GitHub app'
+    required: true
 runs:
   using: "composite"
   steps:
     - name: Run DORA deployment frequency 
       shell: pwsh
       run: |
-         ${{ github.action_path }}/src/deploymentfrequency.ps1 -ownerRepo "${{ inputs.owner-repo }}" -workflows "${{ inputs.workflows }}" -branch "${{ inputs.default-branch }}" -numberOfDays ${{ inputs.number-of-days }} 
+         ${{ github.action_path }}/src/deploymentfrequency.ps1 -ownerRepo "${{ inputs.owner-repo }}" -workflows "${{ inputs.workflows }}" -branch "${{ inputs.default-branch }}" -numberOfDays ${{ inputs.number-of-days }} -appId ${{ inputs.app-id }} -appInstallationId ${{ inputs.app-install-id }} --privateKey ${{ inputs.app-private-key }}
         
