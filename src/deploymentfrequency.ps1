@@ -68,7 +68,7 @@ $dateList = @()
 Foreach ($workflowId in $workflowIds){
     #Get workflow definitions from github
     $uri2 = "https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=100"
-    $workflowRunsResponse = Invoke-RestMethod -Uri $uri2 -ContentType application/json -Method Get -ErrorAction Stop
+    $workflowRunsResponse = Invoke-RestMethod -Uri $uri2 -ContentType application/json -Method Get -Headers $jwtHeader -ErrorAction Stop
 
     $buildTotal = 0
     Foreach ($run in $workflowRunsResponse.workflow_runs){
