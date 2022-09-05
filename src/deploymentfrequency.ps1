@@ -61,17 +61,13 @@ function Get-JwtToken(
     $jwt = $base64Header + '.' + $base64Payload
     $toSign = [System.Text.Encoding]::UTF8.GetBytes($jwt)
 
-    $rsa = [System.Security.Cryptography.RSA]::Create();
-    # DEBUG ONLY
-    Write-Host "'$($privateKey)'"
+    $rsa = [System.Security.Cryptography.RSA]::Create();    
     # https://stackoverflow.com/a/70132607 lead to the right import
     $rsa.ImportRSAPrivateKey([System.Convert]::FromBase64String($privateKey), [ref] $null);
 
     try { $sig = ConvertTo-Base64UrlString $rsa.SignData($toSign,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1) }
     catch { throw New-Object System.Exception -ArgumentList ("Signing with SHA256 and Pkcs1 padding failed using private key $($rsa): $_", $_.Exception) }
-    Write-Host "sig: $sig"
     $jwt = $jwt + '.' + $sig
-    Write-Host "jwt: $jwt"
     # send headers
     $uri = "https://api.github.com/app/installations/$appInstallationId/access_tokens"
     $jwtHeader = @{
