@@ -17,7 +17,7 @@ inputs:
     required: true
     default: 30
   app-id: # required
-    description: 'application of the registered GitHub app'
+    description: 'application id of the registered GitHub app'
     required: true
   app-install-id: # required
     description: 'id of the installed instance of the GitHub app'

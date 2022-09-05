@@ -16,6 +16,9 @@ A GitHub Action to roughly calculate DORA deployment frequency
 - `owner-repo`: optional, string, defaults to the repo where the action runs. Can target another owner or org and repo. e.g. `'samsmithnz/DevOpsMetrics'`
 - `default-branch`: optional, string, defaults to `main` 
 - `number-of-days`: optional, integer, defaults to `30` (days)
+- `app-id`: required, application id of the registered GitHub app
+- `app-install-id`: required, id of the installed instance of the GitHub app
+- `app-private-key` required, private key which has been generated for the installed instance of the GitHub app. Must be provided without leading `'-----BEGIN RSA PRIVATE KEY----- '` and trailing `' -----END RSA PRIVATE KEY-----'`.
 
 To test the current repo (same as where the action runs)
 ```
@@ -34,3 +37,17 @@ To test another repo, with all arguments
     default-branch: 'main'
     number-of-days: 30
 ```
+
+## Installation/Setup
+
+To use this action you need to register a GitHub App in the first place. The necessary steps are described [here](https://docs.github.com/en/developers/apps/building-github-apps/creating-a-github-app). After the GitHub App has been registered a private key must be generated. [Authenticating with GitHub Apps - GitHub Docs](https://docs.github.com/en/developers/apps/building-github-apps/authenticating-with-github-apps#generating-a-private-key)
+
+In addition the following permissions must defined for the GitHub App ([Editing a GitHub App's permissions - GitHub Docs](https://docs.github.com/en/developers/apps/managing-github-apps/editing-a-github-apps-permissions)):
+
+- Repository permissions - Workflow - Actions - Read-only
+- Repository permissions - Workflow - Actions - Metadata
+
+After defining the permissions a private key must also be defined, which then will be used to authenticate as the GitHub App inside the action. [Authenticating with GitHub Apps - GitHub Docs](https://docs.github.com/en/developers/apps/building-github-apps/authenticating-with-github-apps#generating-a-private-key)
+
+After the GitHub App has been registered it must be installed in the organization in which the action is going to be used. - [Installing an app in your organization - GitHub Docs](https://docs.github.com/en/get-started/customizing-your-github-workflow/purchasing-and-installing-apps-in-github-marketplace/installing-an-app-in-your-organization)
+
