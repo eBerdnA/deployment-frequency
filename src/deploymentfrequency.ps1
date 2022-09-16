@@ -8,7 +8,7 @@ Param(
     [string] $actionsToken = "",
     [string] $appId = "",
     [string] $appInstallationId = "",
-    [string] $privateKey = ""
+    [string] $appPrivateKey = ""
 )
 
 #The main function
@@ -300,4 +300,4 @@ function Get-JwtToken([string]$appId, [string] $appInstallationId, [string] $pri
     return $tokenRespone.token
 }
 
-main -ownerRepo $ownerRepo -workflows $workflows -branch $branch -numberOfDays $numberOfDays -patToken $patToken -actionsToken $actionsToken
+main -ownerRepo $ownerRepo -workflows $workflows -branch $branch -numberOfDays $numberOfDays -patToken $patToken -actionsToken $actionsToken -appId $appId -appInstallationId $appInstallationId -appPrivateKey $appPrivateKey
