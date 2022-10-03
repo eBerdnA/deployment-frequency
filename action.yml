@@ -15,14 +15,21 @@ inputs:
   number-of-days: # optional, defaults to 30
     description: number of days to scan
     required: true
-    default: 30
-  patToken: # optional, defaults to an empty string ("")
+    default: "30"
+  pat-token: # optional, defaults to an empty string ("")
     description: GitHub PAT Token
-    required: true
     default: ""
-  actionsToken: # optional, defaults to an empty string ("")
+  actions-token: # optional, defaults to an empty string ("")
     description: GitHub Actions Token, commonly passed in as a variable (secrets.GITHUB_TOKEN)
-    required: true
+    default: ""
+  app-id:
+    description: 'application id of the registered GitHub app'
+    default: ""
+  app-install-id:
+    description: 'id of the installed instance of the GitHub app'
+    default: ""
+  app-private-key:
+    description: 'private key which has been generated for the installed instance of the GitHub app'
     default: ""
 runs:
   using: "composite"
@@ -30,5 +37,8 @@ runs:
     - name: Run DORA deployment frequency 
       shell: pwsh
       run: |
-         ${{ github.action_path }}/src/deploymentfrequency.ps1 -ownerRepo "${{ inputs.owner-repo }}" -workflows "${{ inputs.workflows }}" -branch "${{ inputs.default-branch }}" -numberOfDays ${{ inputs.number-of-days }} -patToken "${{ inputs.patToken }}" -actionsToken "${{ inputs.actionsToken }}"
+         $result = ${{ github.action_path }}/src/deploymentfrequency.ps1 -ownerRepo "${{ inputs.owner-repo }}" -workflows "${{ inputs.workflows }}" -branch "${{ inputs.default-branch }}" -numberOfDays ${{ inputs.number-of-days }} -patToken "${{ inputs.pat-token }}" -actionsToken "${{ inputs.actions-token }}" -appId "${{ inputs.app-id }}" -appInstallationId "${{ inputs.app-install-id }}" -appPrivateKey "${{ inputs.app-private-key }}"
+         Write-Host "::set-output name=result::$result"
+         Write-Output $result >> $env:GITHUB_STEP_SUMMARY
+         
         

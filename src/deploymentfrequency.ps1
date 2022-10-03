@@ -5,8 +5,10 @@ Param(
     [string] $branch,
     [Int32] $numberOfDays,
     [string] $patToken = "",
-    [string] $actionsToken = ""#,
-    #[string] $gitHubAppToken 
+    [string] $actionsToken = "",
+    [string] $appId = "",
+    [string] $appInstallationId = "",
+    [string] $appPrivateKey = ""
 )
 
 #The main function
@@ -14,10 +16,11 @@ function Main ([string] $ownerRepo,
     [string] $workflows,
     [string] $branch,
     [Int32] $numberOfDays,
-    [string] $patToken,
-    [string] $actionsToken#,
-    #[string] $gitHubAppToken 
-    )
+    [string] $patToken = "",
+    [string] $actionsToken = "",
+    [string] $appId = "",
+    [string] $appInstallationId = "",
+    [string] $appPrivateKey = "")
 {
 
     #==========================================
@@ -27,14 +30,14 @@ function Main ([string] $ownerRepo,
     $repo = $ownerRepoArray[1]
     Write-Output "Owner/Repo: $owner/$repo"
     $workflowsArray = $workflows -split ','
-    Write-Output "Workflows: $($workflowsArray[0])"
+    Write-Output "Workflows: $workflows"
     Write-Output "Branch: $branch"
     $numberOfDays = $numberOfDays        
     Write-Output "Number of days: $numberOfDays"
 
     #==========================================
-    # Get authorization headers
-    $authHeader = GetAuthHeader($patToken, $actionsToken)
+    # Get authorization headers  
+    $authHeader = GetAuthHeader $patToken $actionsToken $appId $appInstallationId $appPrivateKey
 
     #==========================================
     #Get workflow definitions from github
@@ -42,23 +45,13 @@ function Main ([string] $ownerRepo,
     if (!$authHeader)
     {
         #No authentication
-        Write-Output "No authentication"
         $workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -SkipHttpErrorCheck -StatusCodeVariable "HTTPStatus"
     }
     else
     {
         #there is authentication
-        if (![string]::IsNullOrEmpty($patToken))
-        {
-            Write-Output "Authentication detected: PAT TOKEN"  
-        }      
-        elseif (![string]::IsNullOrEmpty($actionsToken))
-        {
-            Write-Output "Authentication detected: GITHUB TOKEN"  
-        }
         $workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -Headers @{Authorization=($authHeader["Authorization"])} -SkipHttpErrorCheck -StatusCodeVariable "HTTPStatus" 
         #$workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -ErrorAction Stop
-        #$workflowsResponse = Invoke-RestMethod -Uri $uri -ContentType application/json -Method Get -Headers @{Authorization=("Bearer {0}" -f $base64AuthInfo)} -ErrorAction Stop
     }
     if ($HTTPStatus -eq "404")
     {
@@ -90,11 +83,13 @@ function Main ([string] $ownerRepo,
     #==========================================
     #Filter out workflows that were successful. Measure the number by date/day. Aggegate workflows together
     $dateList = @()
+    $uniqueDates = @()
+    $deploymentsPerDayList = @()
     
     #For each workflow id, get the last 100 workflows from github
     Foreach ($workflowId in $workflowIds){
         #Get workflow definitions from github
-        $uri2 = "https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=100"
+        $uri2 = "https://api.github.com/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=100&status=completed"
         if (!$authHeader)
         {
             $workflowRunsResponse = Invoke-RestMethod -Uri $uri2 -ContentType application/json -Method Get -SkipHttpErrorCheck -StatusCodeVariable "HTTPStatus"
@@ -107,15 +102,41 @@ function Main ([string] $ownerRepo,
         $buildTotal = 0
         Foreach ($run in $workflowRunsResponse.workflow_runs){
             #Count workflows that are completed, on the target branch, and were created within the day range we are looking at
-            if ($run.status -eq "completed" -and $run.head_branch -eq $branch -and $run.created_at -gt (Get-Date).AddDays(-$numberOfDays))
+            if ($run.head_branch -eq $branch -and $run.created_at -gt (Get-Date).AddDays(-$numberOfDays))
             {
                 #Write-Output "Adding item with status $($run.status), branch $($run.head_branch), created at $($run.created_at), compared to $((Get-Date).AddDays(-$numberOfDays))"
                 $buildTotal++       
                 #get the workflow start and end time            
-                $dateList += New-Object PSObject -Property @{start_datetime=$run.created_at;end_datetime=$run.updated_at}     
+                $dateList += New-Object PSObject -Property @{start_datetime=$run.created_at;end_datetime=$run.updated_at}
+                $uniqueDates += $run.created_at.Date.ToString("yyyy-MM-dd")     
             }
         }
+
+        if ($dateList.Length -gt 0)
+        {
+            #==========================================
+            #Calculate deployments per day
+            $deploymentsPerDay = 0
+
+            if ($dateList.Count -gt 0 -and $numberOfDays -gt 0)
+            {
+                $deploymentsPerDay = $dateList.Count / $numberOfDays
+            }
+            $deploymentsPerDayList += $deploymentsPerDay
+            #Write-Output "Adding to list, workflow id $workflowId deployments per day of $deploymentsPerDay"
+        }
     }
+
+    #Write-Output "Total items in list is $($deploymentsPerDayList.Length)"
+    $totalDeployments = 0
+    Foreach ($deploymentItem in $deploymentsPerDayList){
+        $totalDeployments += $deploymentItem
+    }
+    if ($deploymentsPerDayList.Length -gt 0)
+    {
+        $deploymentsPerDay = $totalDeployments / $deploymentsPerDayList.Length
+    }
+    #Write-Output "Total deployments $totalDeployments with a final deployments value of $deploymentsPerDay"
 
     #==========================================
     #Show current rate limit
@@ -138,6 +159,8 @@ function Main ([string] $ownerRepo,
     if ($dateList.Count -gt 0 -and $numberOfDays -gt 0)
     {
         $deploymentsPerDay = $dateList.Count / $numberOfDays
+        # get unique values in $uniqueDates
+        $uniqueDates = $uniqueDates | Sort-Object | Get-Unique
     }
 
     #==========================================
@@ -145,30 +168,37 @@ function Main ([string] $ownerRepo,
     $dailyDeployment = 1
     $weeklyDeployment = 1 / 7
     $monthlyDeployment = 1 / 30
-    $everySixMonthsDeployment = 1 / (6 * 30) #//Every 6 months
+    $everySixMonthsDeployment = 1 / (6 * 30) #Every 6 months
     $yearlyDeployment = 1 / 365
 
     #Calculate rating 
     $rating = ""
+    $color = ""
+
     if ($deploymentsPerDay -le 0)
     {
         $rating = "None"
+        $color = "grey"
     }
     elseif ($deploymentsPerDay -ge $dailyDeployment)
     {
         $rating = "Elite"
+        $color = "green"
     }
     elseif ($deploymentsPerDay -le $dailyDeployment -and $deploymentsPerDay -ge $monthlyDeployment)
     {
         $rating = "High"
+        $color = "green"
     }
     elseif (deploymentsPerDay -le $monthlyDeployment -and $deploymentsPerDay -ge $everySixMonthsDeployment)
     {
         $rating = "Medium"
+        $color = "yellow"
     }
     elseif ($deploymentsPerDay -le $everySixMonthsDeployment)
     {
         $rating = "Low"
+        $color = "red"
     }
 
     #Calculate metric and unit
@@ -201,32 +231,48 @@ function Main ([string] $ownerRepo,
     if ($dateList.Count -gt 0 -and $numberOfDays -gt 0)
     {
         Write-Output "Deployment frequency over last $numberOfDays days, is $displayMetric $displayUnit, with a DORA rating of '$rating'"
+        return Format-OutputMarkdown -workflowIds $workflowIds -displayMetric $displayMetric -displayUnit $displayUnit -numberOfDays $numberOfDays -numberOfUniqueDates $uniqueDates.Length.ToString() -color $color -rating $rating
+
     }
     else
     {
-        Write-Output "Deployment frequency: no data to display for this workflow and time period"
+        $output = "Deployment frequency: no data to display for this workflow and time period"
+        Write-Output $output
+        return $output
     }
 }
 
 #Generate the authorization header for the PowerShell call to the GitHub API
 #warning: PowerShell has really wacky return semantics - all output is captured, and returned
 #reference: https://stackoverflow.com/questions/10286164/function-return-value-in-powershell
-function GetAuthHeader ([string] $patToken, [string] $actionsToken) 
+function GetAuthHeader ([string] $patToken, [string] $actionsToken, [string] $appId, [string] $appInstallationId, [string] $appPrivateKey) 
 {
     #Clean the string - without this the PAT TOKEN doesn't process
     $patToken = $patToken.Trim()
-
+    #Write-Host  $appId
+    #Write-Host "pattoken: $patToken"
+    #Write-Host "app id is something: $(![string]::IsNullOrEmpty($appId))"
+    #Write-Host "patToken is something: $(![string]::IsNullOrEmpty($patToken))"
     if (![string]::IsNullOrEmpty($patToken))
     {
+        Write-Host "Authentication detected: PAT TOKEN"
         $base64AuthInfo = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(":$patToken"))
         $authHeader = @{Authorization=("Basic {0}" -f $base64AuthInfo)}
     }
     elseif (![string]::IsNullOrEmpty($actionsToken))
     {
+        Write-Host "Authentication detected: GITHUB TOKEN"  
         $authHeader = @{Authorization=("Bearer {0}" -f $base64AuthInfo)}
     }
+    elseif (![string]::IsNullOrEmpty($appId)) # GitHup App auth
+    {
+        Write-Host "Authentication detected: GITHUB APP TOKEN"  
+        $token = Get-JwtToken $appId $appInstallationId $appPrivateKey        
+        $authHeader = @{Authorization=("token {0}" -f $token)}
+    }    
     else
     {
+        Write-Host "No authentication detected" 
         $base64AuthInfo = $null
         $authHeader = $null
     }
@@ -234,4 +280,84 @@ function GetAuthHeader ([string] $patToken, [string] $actionsToken)
     return $authHeader
 }
 
-main -ownerRepo $ownerRepo -workflows $workflows -branch $branch -numberOfDays $numberOfDays -patToken $patToken -actionsToken $actionsToken
+function ConvertTo-Base64UrlString(
+    [Parameter(Mandatory=$true,ValueFromPipeline=$true)]$in) 
+{
+    if ($in -is [string]) {
+        return [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($in)) -replace '\+','-' -replace '/','_' -replace '='
+    }
+    elseif ($in -is [byte[]]) {
+        return [Convert]::ToBase64String($in) -replace '\+','-' -replace '/','_' -replace '='
+    }
+    else {
+        throw "GitHub App authenication error: ConvertTo-Base64UrlString requires string or byte array input, received $($in.GetType())"
+    }
+}
+
+function Get-JwtToken([string] $appId, [string] $appInstallationId, [string] $appPrivateKey)
+{
+    # Write-Host "appId: $appId"
+    $now = (Get-Date).ToUniversalTime()
+    $createDate = [Math]::Floor([decimal](Get-Date($now) -UFormat "%s"))
+    $expiryDate = [Math]::Floor([decimal](Get-Date($now.AddMinutes(4)) -UFormat "%s"))
+    $rawclaims = [Ordered]@{
+        iat = [int]$createDate
+        exp = [int]$expiryDate
+        iss = $appId
+    } | ConvertTo-Json
+    # Write-Host "expiryDate: $expiryDate"
+    # Write-Host "rawclaims: $rawclaims"
+
+    $Header = [Ordered]@{
+        alg = "RS256"
+        typ = "JWT"
+    } | ConvertTo-Json
+    # Write-Host "Header: $Header"
+    $base64Header = ConvertTo-Base64UrlString $Header
+    # Write-Host "base64Header: $base64Header"
+    $base64Payload = ConvertTo-Base64UrlString $rawclaims
+    # Write-Host "base64Payload: $base64Payload"
+
+    $jwt = $base64Header + '.' + $base64Payload
+    $toSign = [System.Text.Encoding]::UTF8.GetBytes($jwt)
+
+    $rsa = [System.Security.Cryptography.RSA]::Create();    
+    # https://stackoverflow.com/a/70132607 lead to the right import
+    $rsa.ImportRSAPrivateKey([System.Convert]::FromBase64String($appPrivateKey), [ref] $null);
+
+    try { $sig = ConvertTo-Base64UrlString $rsa.SignData($toSign,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1) }
+    catch { throw New-Object System.Exception -ArgumentList ("GitHub App authenication error: Signing with SHA256 and Pkcs1 padding failed using private key $($rsa): $_", $_.Exception) }
+    $jwt = $jwt + '.' + $sig
+    # send headers
+    $uri = "https://api.github.com/app/installations/$appInstallationId/access_tokens"
+    $jwtHeader = @{
+        Accept = "application/vnd.github+json"
+        Authorization = "Bearer $jwt"
+    }
+    $tokenResponse = Invoke-RestMethod -Uri $uri -Headers $jwtHeader -Method Post -ErrorAction Stop
+    # Write-Host $tokenResponse.token
+    return $tokenResponse.token
+}
+
+# Format output for deployment frequency in markdown
+function Format-OutputMarkdown([array] $workflowIds, [string] $rating, [string] $displayMetric, [string] $displayUnit, [string] $numberOfDays, [string] $numberOfUniqueDates, [string] $color)
+{
+    $workflowNames = $workflowIds -join ", "
+    $encodedDeploymentFrequency = [uri]::EscapeUriString($displayMetric + " " + $displayUnit)
+
+    $markdown = "## DORA Metric: Deployment Frequency`r`n" +
+    "This is how often you deploy **successfully** to production.`r`n" +
+    "### Results`r`n" +
+    "- Workflow(s): $workflowNames`n" +
+    "- Deployment Frequency: $displayMetric $displayUnit`n" +
+    # "You deployed to production **" + productionWorkflowRuns.length + " times** in the last " + numberOfDays + " days.`n" +
+    "In the last $numberOfDays days, you deployed to production on **$numberOfUniqueDates days** `r`n" + # excluding non-working days.`r`n" +
+    # "There are **" + numberOfWorkingDays + " working days** in the last " + numberOfDays + " days.`n" +
+    "This is **$rating** deployment frequency.`r`n" +
+    "## DORA Classification: $rating`r`n" +
+    "![Deployment Frequency](https://img.shields.io/badge/frequency-" + $encodedDeploymentFrequency + "-" + $color + "?logo=github&label=Deployment%20frequency)"
+
+    return $markdown
+}
+
+main -ownerRepo $ownerRepo -workflows $workflows -branch $branch -numberOfDays $numberOfDays -patToken $patToken -actionsToken $actionsToken -appId $appId -appInstallationId $appInstallationId -appPrivateKey $appPrivateKey
